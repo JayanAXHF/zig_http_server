@@ -39,6 +39,7 @@ pub fn main() !void {
             fn handle(request: Request, connection: *std.net.Server.Connection, _allocator: std.mem.Allocator) anyerror!void {
                 std.log.info("POST /test", .{});
                 const fmt_message = try std.fmt.allocPrint(_allocator, "<html><body><h1>POST /test</h1><p>{s}</p></body></html>", .{request.body orelse "test"});
+                defer _allocator.free(fmt_message);
                 try Response.send_200(connection.*, fmt_message, _allocator);
                 std.log.info("200 OK", .{});
                 return;
