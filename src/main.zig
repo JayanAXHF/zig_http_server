@@ -36,9 +36,10 @@ pub fn main() !void {
             }
         }.handle),
         RouterLib.Endpoint.init(Method.POST, "/post", struct {
-            fn handle(_: Request, connection: *std.net.Server.Connection, _allocator: std.mem.Allocator) anyerror!void {
+            fn handle(request: Request, connection: *std.net.Server.Connection, _allocator: std.mem.Allocator) anyerror!void {
                 std.log.info("POST /test", .{});
-                try Response.send_200(connection.*, "<html><body><h1>POST /test</h1></body></html>", _allocator);
+                const fmt_message = try std.fmt.allocPrint(_allocator, "<html><body><h1>POST /test</h1><p>{s}</p></body></html>", .{request.body orelse "test"});
+                try Response.send_200(connection.*, fmt_message, _allocator);
                 std.log.info("200 OK", .{});
                 return;
             }
@@ -59,7 +60,7 @@ pub fn main() !void {
         var connection = try server.accept();
 
         try RequestLib.read_request(connection, buffer[0..buffer.len]);
-        const request = RequestLib.parse_request(buffer[0..buffer.len]);
+        const request = try RequestLib.parse_request(allocator, buffer[0..buffer.len]);
 
         try router.route(request, &connection, allocator);
         continue;

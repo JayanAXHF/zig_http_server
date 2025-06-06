@@ -29,49 +29,72 @@ pub const Request = struct {
     method: Method,
     version: []const u8,
     uri: []const u8,
-    body: []const u8,
-    pub fn init(method: Method, uri: []const u8, version: []const u8, body: []const u8) Request {
+    body: ?[]const u8,
+    headers: ?std.StringHashMap([]const u8),
+    pub fn init(method: Method, uri: []const u8, version: []const u8, headers: ?std.StringHashMap([]const u8), body: ?[]const u8) Request {
         return Request{
             .method = method,
             .uri = uri,
             .version = version,
             .body = body,
+            .headers = headers,
         };
     }
 };
 
-pub fn parse_request(text: []u8) Request {
+pub fn parse_request(allocator: std.mem.Allocator, text: []u8) !Request {
     var method_text = std.mem.splitScalar(u8, text, ' ');
     const method = Method.init(method_text.next().?) catch unreachable;
     switch (method) {
-        Method.GET => return _parse_get_request(text),
+        Method.GET => return try _parse_get_request(allocator, text),
         else => {
             std.log.info("{s}", .{text});
-            return _parse_post_request(text);
+            return try _parse_post_request(allocator, text);
         },
     }
 }
 
-pub fn _parse_get_request(text: []u8) Request {
+pub fn _parse_get_request(allocator: std.mem.Allocator, text: []u8) !Request {
     const line_index = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
     var iterator = std.mem.splitScalar(u8, text[0..line_index], ' ');
     const method = try Method.init(iterator.next().?);
     const uri = iterator.next().?;
     const version = iterator.next().?;
-    const request = Request.init(method, uri, version, "");
+    var headers = std.StringHashMap([]const u8).init(allocator);
+    defer headers.deinit();
+    var header_text_iter = std.mem.splitSequence(u8, text[line_index..], "\r\n");
+    while (header_text_iter.next()) |header_text| {
+        var header = std.mem.splitScalar(u8, header_text, ':');
+        const key = header.next().?;
+        const value = header.next().?;
+        try headers.put(key, value);
+    }
+    const request = Request.init(method, uri, version, headers, null);
+
     return request;
 }
 
-pub fn _parse_post_request(text: []u8) Request {
+pub fn _parse_post_request(allocator: std.mem.Allocator, text: []u8) !Request {
     const line_index = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
     var iterator = std.mem.splitScalar(u8, text[0..line_index], ' ');
     const method = try Method.init(iterator.next().?);
     const uri = iterator.next().?;
     const version = iterator.next().?;
     var iter = std.mem.splitSequence(u8, text[line_index..], "\r\n\r\n");
-    _ = iter.next();
+    var headers = std.StringHashMap([]const u8).init(allocator);
+    defer headers.deinit();
+
+    var header_text_iter = std.mem.splitSequence(u8, iter.next().?, "\r\n");
+    while (header_text_iter.next()) |header_text| {
+        var header = std.mem.splitScalar(u8, header_text, ':');
+        const key = header.next().?;
+        const value = header.next().?;
+        try headers.put(key, value);
+    }
+
     const body = iter.next().?;
-    const request = Request.init(method, uri, version, body);
+
+    const request = Request.init(method, uri, version, headers, body);
     std.log.info("Request: {any}", .{request});
     return request;
 }
