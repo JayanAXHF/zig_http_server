@@ -42,6 +42,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const thread_pool = b.addModule("thread_pool", .{
+        .root_source_file = b.path("src/thread_pool.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Zig modules are the preferred way of making Zig code available to consumers.
@@ -102,6 +108,10 @@ pub fn build(b: *std.Build) void {
                 .{
                     .name = "lib",
                     .module = lib,
+                },
+                .{
+                    .name = "thread_pool",
+                    .module = thread_pool,
                 },
             },
         }),

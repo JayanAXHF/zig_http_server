@@ -4,6 +4,9 @@ const RequestLib = @import("request");
 const Response = @import("response");
 const Method = RequestLib.Method;
 const Request = RequestLib.Request;
+const ThreadPoolLib = @import("thread_pool");
+const ThreadPool = ThreadPoolLib.ThreadPool;
+
 const stdout = std.io.getStdOut().writer();
 
 const handler_fn = fn (Request, *std.net.Server.Connection, std.mem.Allocator) anyerror!void;
@@ -40,13 +43,8 @@ pub const Router = struct {
         if (self.len + 1 > self.capacity) {
             var new_buf = try self.allocator.alloc(Endpoint, self.capacity * 2);
 
-            // Copy existing elements into new buffer
             @memcpy(new_buf[0..self.endpoints.len], self.endpoints[0..self.endpoints.len]);
-
-            // Free the old buffer
             self.allocator.free(self.endpoints);
-
-            // Update to new buffer and capacity
             self.endpoints = new_buf;
             self.capacity = 2 * self.capacity;
         }
@@ -67,6 +65,42 @@ pub const Router = struct {
         }
         try Response.send_404(connection.*);
         return;
+    }
+    pub fn start(self: *Router, port: u16, host: [4]u8) !void {
+        std.log.info("Starting server...", .{});
+        const socket = try SocketConf.Socket.init(port, host);
+        try stdout.print("Server Addr: {any}\n", .{socket._address});
+        var server = try socket._address.listen(.{});
+        var thread_pool = try self.allocator.create(ThreadPool);
+        thread_pool = try ThreadPool.init(self.allocator, 10);
+        defer {
+            thread_pool.deinit();
+            self.allocator.destroy(thread_pool);
+        }
+
+        while (thread_pool.running) {
+            std.log.info("Attempting to accept connection", .{});
+
+            var conn = try server.accept();
+
+            const _args = try self.allocator.create(struct { router: *Router, connection: *std.net.Server.Connection });
+            _args.* = .{ .router = self, .connection = &conn };
+
+            try thread_pool.queue_job(struct {
+                fn job(any: *anyopaque) anyerror!void {
+                    const args: *const struct { router: *Router, connection: *std.net.Server.Connection } = @ptrCast(@alignCast(any));
+                    const _allocator = args.router.allocator;
+                    const _router = args.router;
+
+                    var buffer: [1000]u8 = undefined;
+                    var connection = args.connection.*;
+                    try RequestLib.read_request(connection, buffer[0..buffer.len]);
+                    const request = try RequestLib.parse_request(_allocator, buffer[0..buffer.len]);
+                    try _router.route(request, &connection, _allocator);
+                }
+            }.job, _args);
+
+        }
     }
     pub fn deinit(self: *Router) void {
         self.allocator.free(self.endpoints);

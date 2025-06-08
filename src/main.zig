@@ -10,14 +10,11 @@ const Router = RouterLib.Router;
 const stdout = std.io.getStdOut().writer();
 
 pub fn main() !void {
-    const socket = try SocketConf.Socket.init();
-    try stdout.print("Server Addr: {any}\n", .{socket._address});
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     std.log.info("Allocator Leaked: {any}", .{gpa.detectLeaks()});
     const allocator = gpa.allocator();
 
-    var server = try socket._address.listen(.{});
     const endpoints: []const RouterLib.Endpoint = &[_]RouterLib.Endpoint{
         RouterLib.Endpoint.init(Method.GET, "/", struct {
             fn handle(_: Request, connection: *std.net.Server.Connection, _allocator: std.mem.Allocator) anyerror!void {
@@ -38,9 +35,26 @@ pub fn main() !void {
         RouterLib.Endpoint.init(Method.POST, "/post", struct {
             fn handle(request: Request, connection: *std.net.Server.Connection, _allocator: std.mem.Allocator) anyerror!void {
                 std.log.info("POST /test", .{});
-                const fmt_message = try std.fmt.allocPrint(_allocator, "<html><body><h1>POST /test</h1><p>{s}</p></body></html>", .{request.body orelse "test"});
-                defer _allocator.free(fmt_message);
-                try Response.send_200(connection.*, fmt_message, _allocator);
+                const body = request.body orelse "test";
+                var headers = std.StringHashMap([]const u8).init(_allocator);
+                defer headers.deinit();
+                try headers.put("Content-Type", "text/html");
+                const response = Response.Response.init(200, headers, body);
+                try response.send(connection.*, _allocator);
+                std.log.info("200 OK", .{});
+                return;
+            }
+        }.handle),
+        RouterLib.Endpoint.init(Method.POST, "/sleepy", struct {
+            fn handle(request: Request, connection: *std.net.Server.Connection, _allocator: std.mem.Allocator) anyerror!void {
+                std.log.info("POST /test", .{});
+                const body = request.body orelse "test";
+                var headers = std.StringHashMap([]const u8).init(_allocator);
+                defer headers.deinit();
+                try headers.put("Content-Type", "text/html");
+                const response = Response.Response.init(200, headers, body);
+                std.time.sleep(10 * std.time.ns_per_s);
+                try response.send(connection.*, _allocator);
                 std.log.info("200 OK", .{});
                 return;
             }
@@ -56,14 +70,5 @@ pub fn main() !void {
         try router.add(endpoint.method, endpoint.path, endpoint.handler);
     }
 
-    while (true) {
-        var buffer: [1000]u8 = undefined;
-        var connection = try server.accept();
-
-        try RequestLib.read_request(connection, buffer[0..buffer.len]);
-        const request = try RequestLib.parse_request(allocator, buffer[0..buffer.len]);
-
-        try router.route(request, &connection, allocator);
-        continue;
-    }
+    try router.start(3490, [4]u8{ 127, 0, 0, 1 });
 }
