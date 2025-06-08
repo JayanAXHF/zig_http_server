@@ -56,7 +56,9 @@ pub const Router = struct {
     pub fn route(router: Router, request: @import("request").Request, connection: *std.net.Server.Connection, allocator: std.mem.Allocator) !void {
         for (router.endpoints) |endpoint| {
             if (request.method == endpoint.method) {
-                if (std.mem.eql(u8, request.uri, endpoint.path)) {
+                var uri_iter = std.mem.splitScalar(u8, request.uri, '?');
+                const uri = uri_iter.next() orelse request.uri;
+                if (std.mem.eql(u8, uri, endpoint.path)) {
                     std.log.info("Endpoint: {s}", .{endpoint.path});
                     try endpoint.handler(request, connection, allocator);
                     return;

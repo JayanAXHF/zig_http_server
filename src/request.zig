@@ -44,7 +44,7 @@ pub const Request = struct {
 
 pub fn parse_request(allocator: std.mem.Allocator, text: []u8) !Request {
     var method_text = std.mem.splitScalar(u8, text, ' ');
-    const method = Method.init(method_text.next().?) catch unreachable;
+    const method = Method.init(method_text.next() orelse "GET") catch unreachable;
     switch (method) {
         Method.GET => return try _parse_get_request(allocator, text),
         else => {
@@ -66,7 +66,11 @@ pub fn _parse_get_request(allocator: std.mem.Allocator, text: []u8) !Request {
     while (header_text_iter.next()) |header_text| {
         var header = std.mem.splitScalar(u8, header_text, ':');
         const key = header.next().?;
-        const value = header.next().?;
+        const value = header.next() orelse {
+            std.log.err("Header missing value: {s}", .{key});
+            continue;
+        };
+
         try headers.put(key, value);
     }
     const request = Request.init(method, uri, version, headers, null);
