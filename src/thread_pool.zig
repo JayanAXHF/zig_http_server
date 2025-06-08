@@ -98,7 +98,7 @@ fn run_worker(pool: *ThreadPool) void {
 
             if (job_count > 0) {
                 maybe_job = pool.jobs.pop();
-                std.log.info("Thread {d} popped job, queue now has {d} jobs", .{ thread_id, pool.jobs.items.len });
+                std.log.debug("Thread {d} popped job, queue now has {d} jobs", .{ thread_id, pool.jobs.items.len });
             }
         }
 

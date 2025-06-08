@@ -47,6 +47,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    // .. snip
+
+    const logex = b.dependency("logex", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
 
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
@@ -112,6 +119,10 @@ pub fn build(b: *std.Build) void {
                 .{
                     .name = "thread_pool",
                     .module = thread_pool,
+                },
+                .{
+                    .name = "logex",
+                    .module = logex.module("logex"),
                 },
             },
         }),

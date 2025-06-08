@@ -59,7 +59,7 @@ pub const Router = struct {
                 var uri_iter = std.mem.splitScalar(u8, request.uri, '?');
                 const uri = uri_iter.next() orelse request.uri;
                 if (std.mem.eql(u8, uri, endpoint.path)) {
-                    std.log.info("Endpoint: {s}", .{endpoint.path});
+                    std.log.info("Endpoint: `{s}`", .{endpoint.path});
                     try endpoint.handler(request, connection, allocator);
                     return;
                 }
@@ -71,7 +71,7 @@ pub const Router = struct {
     pub fn start(self: *Router, port: u16, host: [4]u8) !void {
         std.log.info("Starting server...", .{});
         const socket = try SocketConf.Socket.init(port, host);
-        try stdout.print("Server Addr: {any}\n", .{socket._address});
+         std.log.info("Server Addr: {any}\n", .{socket._address});
         var server = try socket._address.listen(.{});
         var thread_pool = try self.allocator.create(ThreadPool);
         thread_pool = try ThreadPool.init(self.allocator, 10);
